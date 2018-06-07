@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<link rel="stylesheet" type="text/css" href="styles.css">
+<svg id="charts" width="960" height="500"></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="dummyData.js"></script>
+<script>
+
+function generateChart(data) {
+  var keys = Object.keys(oracleAlphaData)
+
+  var medicationList = oracleAlphaData.medications.map(medication => medication.name)
+
+  var medicationListUnique = [...new Set(medicationList)];
+
+  var colorSwatch = ["#084594", "#2171b5", "#4292c6", "#6baed6", "#9ecae1", "#c6dbef", "#deebf7", "#f7fbff"]
+
+
+  var svg = d3.select("#charts"),
+      margin = {top: 20, right: 20, bottom: 30, left: 0},
+      width = +svg.attr("width") - margin.left - margin.right,
+      height = +svg.attr("height") - margin.top - margin.bottom,
+      g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+      linegraph = svg.append("g").attr("id", "line").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+      ganttchart = svg.append("g").attr("id", "gantt").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+      var parseTime = d3.timeParse("%d-%b-%y");
+
+      var x = d3.scaleTime()
+          .rangeRound([150, width]);
+
+      var y = d3.scaleLinear()
+          .rangeRound([height / 50, 0]);
+
+      x.domain(d3.extent(oracleAlphaData.basic_plotting_categories, function(d) { return parseTime(d.date); }));
+
+      g.append("g")
+          .attr("transform", "translate(0," + height + ")")
+          .call(d3.axisBottom(x))
+
+
+  var yAxisLabelsSansMedications = ["Medications", "", "",
+    "Radiation", "", "",
+    "Surgery", "", "",
+    "Imaging", "", "",
+    "Molecular", "", "",
+    "ECOG PS", ""]
+
+  var yAxisLabels = [yAxisLabelsSansMedications[0]]
+  .concat(medicationListUnique)
+  .concat(yAxisLabelsSansMedications.slice(1, yAxisLabelsSansMedications.length))
+
+  var yScale = d3.scaleLinear()
+    .domain([0, yAxisLabels.length])
+    .range([margin.top, height])
+
+  var yAxis = d3.axisLeft()
+     .scale(yScale)
+    .ticks(yAxisLabels.length)
+    .tickFormat(function(d, i) {
+      // debugger;
+      return yAxisLabels[d];
+    });
+
+  var axisY = g.append("g")
+   .attr("class", "y axis")
+   .attr("id", "yaxis")
+   .attr("transform", "translate(" + [150, -margin.bottom/2] + ")")
+   .call(yAxis);
+
+  // bold the y axis
+  svg.select("#yaxis").selectAll("text").attr("class", function(d,i) {
+    var categories = ["Medications", "Radiation", "Surgery", "Imaging", "Molecular", "ECOG PS"]
+    if (categories.includes(this.innerHTML)) {
+      return "categoryAxisLabel"
+    }
+  })
+
+  function getYPositionOf(term){
+    var percentageHeight = yAxisLabels.indexOf(term) / yAxisLabels.length
+    return height * percentageHeight - (yAxisLabels.length / 5)
+  }
+
+    // gridlines in x axis function
+    function make_x_gridlines() {
+        return d3.axisBottom(x)
+            .ticks(5)
+    }
+
+    // gridlines in y axis function
+    function make_y_gridlines() {
+        return d3.axisLeft(yScale)
+    }
+
+    // add the X gridlines
+      g.append("g")
+          .attr("class", "grid")
+          .attr("transform", "translate(0," + (height) + ")")
+          .call(make_x_gridlines()
+              .tickSize(-height)
+              .tickFormat("")
+          )
+
+    // Y gridlines would go here
+
+      // // add the Y gridlines
+      // svg.append("g")
+      //     .attr("class", "grid")
+      //     .attr("transform", "translate(150,0)")
+      //     .call(make_y_gridlines()
+      //         .tickSize(-width)
+      //         .tickFormat(function(d, i){
+      //           debugger;
+      //         })
+      //     )
+
+
+  g.selectAll("circle")
+    .data(oracleAlphaData.basic_plotting_categories)
+    .enter()
+    .append("circle")
+    // .transition()  // Transition from old to new
+    // .duration(1000)  // Length of animation
+    .attr("r", d => 10)
+    .attr("cx", d => x(parseTime(d.date)))
+    .attr("cy", function(d){
+      return getYPositionOf(d.category)
+    })
+    .attr("class", d => d.category.toLowerCase())
+    .on("mouseover", d => showTooltip(d))
+    .on("mouseout", d => hideTooltip());
+
+  var div = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+
+  ecogCircleFills = ["#fff5f0", "#fee0d2", "#fcbba1", "#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#99000d"]
+
+
+  var line = d3.line()
+      .x(function(d) { return x(parseTime(d.date)); })
+      .y(function(d) { return height + y(d.value) - 10; });
+
+
+  linegraph.append("path")
+      .datum(oracleAlphaData.line)
+      .attr("fill", "none")
+      .attr("stroke", "#d3d3d3")
+      .attr("stroke-linejoin", "round")
+      .attr("stroke-linecap", "round")
+      .attr("stroke-width", 1.5)
+      .attr("d", line);
+
+  linegraph.selectAll("circle")
+      .data(oracleAlphaData.line)
+      .enter().append("circle")
+      .transition()  // Transition from old to new
+      .duration(1000)  // Length of animation
+      .attr("r", 10)
+      .attr("cx", function(d, i) {
+        return x(parseTime(d.date))
+      })
+      .attr("cy", function(d) {
+        return height + y(d.value) - 10;
+      })
+      .attr("fill", function(d, i) {
+        return ecogCircleFills[d.value]
+      })
+
+
+  linegraph.selectAll("div")
+      .data(oracleAlphaData.line)
+      .enter()
+      .append("text")
+      .attr("x", function(d, i) {
+        return x(parseTime(d.date)) - 4
+      })
+      .attr("y", function(d) {
+        return height + y(d.value) - 5;
+      })
+      .text(function(d){return d.value});
+
+  ganttchart.selectAll("rect")
+    .data(oracleAlphaData.medications)
+    .enter()
+    .append("rect")
+    .transition()  // Transition from old to new
+    .duration(1000)  // Length of animation
+    .attr("width", d => x(parseTime(d.end)) - x(parseTime(d.start)))
+    .attr("height", 15)
+    .attr("y", function(d) {
+      return getYPositionOf(d.name)
+    })
+    .attr("x", (d,i) => x(parseTime(d.start)))
+    .attr("class", "gantt-rect")
+    .style("fill", (d,i) => colorSwatch[medicationList.indexOf(d.name)]);
+
+  function showTooltip(d) {
+    div.transition()
+        .duration(200)
+        .style("opacity", .9);
+    div.html(d.description)
+        .style("left", (d3.event.pageX) + "px")
+        .style("top", (d3.event.pageY - 28) + "px");
+  }
+
+  function hideTooltip(){
+    div.transition()
+        .duration(500)
+        .style("opacity", 0);
+  }
+}
+
+generateChart(oracleAlphaData)
+
+// function filterDataByDate(data, date) {
+//   newDataCollection = {}
+//   var keys = Object.keys(data)
+//
+//   function filterByKey(data, key) {
+//     data[key].filter(dataPoint => {
+//       var parseTime = d3.timeParse("%d-%b-%y");
+//       debugger;
+//       parseTime(dataPoint.start) > Date.now()
+//     })
+//   }
+//
+//   keys.forEach(key => newDataCollection[key] = filterByKey(data, key))
+// }
+//
+// document.getElementById("2monthsbutton").addEventListener('click', anything)
+
+</script>

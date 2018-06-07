@@ -1,0 +1,63 @@
+.surgery {
+  fill: #ff9800;
+}
+
+.imaging {
+  fill: #35b135;
+}
+
+.molecular {
+  fill: #681975;
+}
+
+.circle-text-value {
+  fill: black;
+  color: black;
+}
+
+div.tooltip {
+  position: absolute;
+  text-align: center;
+  width: 60px;
+  height: 28px;
+  padding: 2px;
+  font: 12px sans-serif;
+  background: lightsteelblue;
+  border: 0px;
+  border-radius: 8px;
+  pointer-events: none;
+}
+
+.line {
+  fill: none;
+  stroke: #d3d3d3;
+  stroke-width: 2px;
+}
+
+.grid line {
+  stroke: lightgrey;
+  stroke-opacity: 0.7;
+  shape-rendering: crispEdges;
+  stroke-dasharray: 2, 2;
+}
+
+.grid path {
+  stroke-width: 0;
+}
+
+text {
+  color: green;
+}
+
+.y.axis line {
+  display: none;
+}
+
+.categoryAxisLabel {
+  font-weight: bold;
+}
+
+.gantt-rect {
+ rx: 2;
+ ry: 2;
+}
