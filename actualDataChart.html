@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<link rel="stylesheet" type="text/css" href="styles.css">
+<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.0.13/css/all.css" integrity="sha384-DNOHZ68U8hZfKXOrtjWvjxusGo9WQnrNx2sqG0tfsghAvtVlRW3tvkXWZh58N9jp" crossorigin="anonymous">
+<svg id="charts" width="960" height="500"></svg>
+<div class="slidecontainer">
+  <input type="range" min="1" max="100" value="50" class="slider" id="myRange">
+</div>
+
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+<script src="actualData.js"></script>
+<script>
+
+var parseTime = d3.timeParse("%d-%b-%y");
+
+
+var zoomLevelMapping = {
+  // 0: full amount of time / 2,
+  // 1: half that amount,
+  // 3: half the amount above,
+  // 4: half the amount above,
+  // 5: same,
+  // 6: same
+}
+
+//idea is to get median and then give it one of the zoom levels
+//easy. it'll adjust
+//then save the data in currentData
+//and if it's filtered again use that to get the median. done.
+
+function calculateZoomLevelMapping(dataObj) {
+  var datesMinAndMax = d3.extent(collectDates(realData), function(d) { return parseTime(d); });
+  var diffInMilliseconds = datesMinAndMax[1] - datesMinAndMax[0]
+  zoomLevelMapping[0] = diffInMilliseconds / 2
+  zoomLevelMapping[1] = diffInMilliseconds / 4
+  zoomLevelMapping[2] = diffInMilliseconds / 8
+  zoomLevelMapping[3] = diffInMilliseconds / 16
+  zoomLevelMapping[4] = diffInMilliseconds / 32
+  zoomLevelMapping[5] = diffInMilliseconds / 64
+  // zoomLevelMapping[0] =
+}
+
+var currentDataCollection = realData
+calculateZoomLevelMapping(realData)
+
+function collectDates(dataObj) {
+  datesCollection = []
+  var parseTime = d3.timeParse("%d-%b-%y");
+  dataObjkeys = Object.keys(dataObj)
+  dataObjkeys.forEach(function(key){
+    dataObj[key].forEach(function(entry){
+      entryKeys = Object.keys(entry)
+      entryKeys.forEach(function(key){
+        if(parseTime(entry[key])){
+          datesCollection.push(entry[key])
+        }
+      })
+    })
+  })
+  return datesCollection
+}
+
+function filterDataObjByDate(dataObj, start_date, end_date){
+  filteredDatesCollection = {}
+  var parseTime = d3.timeParse("%d-%b-%y");
+  dataObjkeys = Object.keys(dataObj)
+  dataObjkeys.forEach(function(key){
+    filteredEntries = []
+    dataObj[key].forEach(function(entry){
+      entryKeys = Object.keys(entry)
+      entryKeys.forEach(function(key){
+        if(parseTime(entry[key])){
+          if(parseTime(entry[key]) > start_date && parseTime(entry[key]) < end_date){
+            filteredEntries.push(entry)
+          }
+        }
+      })
+    })
+    filteredDatesCollection[key] = filteredEntries
+  })
+  return filteredDatesCollection
+}
+
+function sortedDate(datesCollection){
+  var parseTime = d3.timeParse("%d-%b-%y");
+
+  var timesCollection = datesCollection.map(function(date){
+    return parseTime(date)
+  })
+
+  const sorted = timesCollection.sort((a, b) => {
+    return a - b
+  })
+
+  return sorted
+}
+
+function formatString(thing) {
+  if (thing && thing.length > 15) {
+    return thing.slice(0, 15) + "..."
+  } else {
+    return thing
+  }
+}
+
+function medianDate(datesCollection){
+  var sortedDates = sortedDate(datesCollection)
+  var median = sortedDates[Math.floor(sortedDates.length / 2)]
+  return median
+}
+
+medianDate(collectDates(realData))
+
+
+// function generateChart(data) {
+  var keys = Object.keys(realData)
+
+  var medicationList = realData.medications.map(medication => medication.name)
+  var radiationList = realData.radiation.map(radiation => radiation.name)
+
+  var medicationListUnique = [...new Set(medicationList)];
+  var radiationListUnique = [...new Set(medicationList)];
+
+  var colorSwatch = ["#084594", "#2171b5", "#4292c6", "#6baed6", "#9ecae1", "#c6dbef", "#deebf7", "#f7fbff"]
+
+
+  var svg = d3.select("#charts"),
+      margin = {top: 20, right: 20, bottom: 30, left: 0},
+      width = +svg.attr("width") - margin.left - margin.right,
+      height = +svg.attr("height") - margin.top - margin.bottom,
+      medicationsSection = svg.append("g").attr("id", "gantt").attr("transform", "translate(" + margin.left + "," + margin.top + ")"),
+      radiationSection = svg.append("g").attr("id", "radiations").attr("transform", "translate(" + margin.left + "," + margin.top + ")"),
+      imagingSection = svg.append("g").attr("id", "imaging").attr("transform", "translate(" + margin.left + "," + margin.top + ")"),
+      linegraph = svg.append("g").attr("id", "line").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+      var parseTime = d3.timeParse("%d-%b-%y");
+
+      var x = d3.scaleTime()
+          .rangeRound([150, width]);
+
+      var y = d3.scaleLinear()
+          .rangeRound([height / 50, 0]);
+
+      x.domain(d3.extent(collectDates(realData), function(d) { return parseTime(d); }));
+
+      svg.append("g")
+          .attr("class", "x axis")
+          .attr("transform", "translate(0," + height + ")")
+          .call(d3.axisBottom(x))
+
+
+  var yAxisLabelsSansMedications = ["Medications", "", "",
+    "Radiation", "EBRT", "SRS", "WBRT", "", "",
+    "Surgery", "", "",
+    "Imaging", "CT", "PET CT", "Brain MRI", "", "",
+    "Molecular", "", "",
+    "ECOG PS", ""]
+
+  var yAxisLabels = [yAxisLabelsSansMedications[0]]
+  .concat(medicationListUnique)
+  .concat(yAxisLabelsSansMedications.slice(1, yAxisLabelsSansMedications.length))
+
+  var yScale = d3.scaleLinear()
+    .domain([0, yAxisLabels.length])
+    .range([margin.top, height])
+
+  var yAxis = d3.axisLeft()
+     .scale(yScale)
+    .ticks(yAxisLabels.length)
+    .tickFormat(function(d, i) {
+      // debugger;
+      // return ''
+      return yAxisLabels[d];
+    });
+
+
+  var axisY = svg.append("g")
+   .attr("class", "y axis")
+   .attr("id", "yaxis")
+   .attr("transform", "translate(" + [150, -margin.bottom/2] + ")")
+   .call(yAxis)
+   .selectAll("g")
+    .append("svg:foreignObject")
+    .append("xhtml:div")
+    .attr("class", "my-x-axis-label")
+    .html(function(d, i) {
+      var categories = ["Medications", "Radiation", "Surgery", "Imaging", "Molecular", "ECOG PS"]
+      if(categories.includes(yAxisLabels[d])) {
+      return `<div class="lediv"><p class="yaxis-label"><i class="fas fa-hospital"></i>&nbsp&nbsp&nbsp${formatString(yAxisLabels[d])}</p></div>`
+    } else {
+      return `<p class="yaxis-label subcategory">&nbsp&nbsp&nbsp${formatString(yAxisLabels[d])}</p>`
+    }
+;});;
+
+d3.selectAll('.lediv')
+.style("height", function(d,i){
+  if (yAxisLabels[i] == "Medications") {
+    return height + "px";
+  } else if (yAxisLabels[i] !== "") {
+    return height / yAxisLabelsSansMedications.length * 2.2 + "px";
+
+    // return '0px;'
+  } else {
+    // return height / yAxisLabelsSansMedications.length * 2.2 + "px";
+    return '0px;'
+
+  }
+});
+  // bold the y axis
+  svg.select("#yaxis").selectAll("text").attr("class", function(d,i) {
+    var categories = ["Medications", "Radiation", "Surgery", "Imaging", "Molecular", "ECOG PS"]
+    // if (categories.includes(this.innerHTML)) {
+      return "categoryAxisLabel"
+    // }
+  });
+
+
+  // svg.selectAll("#yaxis .tick")
+  //   .append("rect")
+  //   .attr("class", "label-rect")
+  //   .style("width", "150px")
+  //   .attr("transform", "translate(" + [-150, -margin.bottom/2] + ")");
+
+    // var tickLabels = d3.selectAll("#yaxis .tick rect");
+    //
+    // tickLabels.style("height", function(d,i){
+    //   if (yAxisLabels[d]) {
+    //     return (height / yAxisLabelsSansMedications.length) * 2.2;
+    //   } else {
+    //     return '0px;'
+    //   }
+    // });
+
+
+
+  function getYPositionOf(term){
+    var percentageHeight = yAxisLabels.indexOf(term) / yAxisLabels.length
+    return height * percentageHeight - (yAxisLabels.length);
+  }
+
+  svg.selectAll("circle")
+    .data(realData.basic_plotting_categories)
+    .exit()
+    .remove()
+
+  svg.selectAll("circle")
+    .data(realData.basic_plotting_categories)
+    .enter()
+    .append("circle")
+    // .transition()  // Transition from old to new
+    // .duration(900)  // Length of animation
+    .attr("r", d => 10)
+    .attr("cx", d => x(parseTime(d.date)))
+    .attr("cy", function(d){
+      return getYPositionOf(d.category)
+    })
+    .attr("class", d => 'basic-circle')
+    .on("mouseover", d => showTooltip(d))
+    .on("mouseout", d => hideTooltip());
+
+  var div = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+
+  ecogCircleFills = ["#fff5f0", "#fee0d2", "#fcbba1", "#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#99000d"]
+
+  var line = d3.line()
+      .x(function(d) { return x(parseTime(d.date)); })
+      .y(function(d) { return height + y(d.value) - 10; });
+
+    function make_x_gridlines() {
+        return d3.axisBottom(x)
+            .ticks(5)
+    }
+
+
+        // gridlines in y axis function
+        function make_y_gridlines() {
+            return d3.axisLeft(yScale)
+        }
+
+        // add the X gridlines
+          // svg.append("g")
+          //     .attr("class", "grid")
+          //     .attr("transform", "translate(0," + (height) + ")")
+          //     .call(make_x_gridlines()
+          //         .tickSize(-height)
+          //         .tickFormat("")
+          //     )
+
+        // Y gridlines would go here
+
+          // // add the Y gridlines
+          // svg.append("g")
+          //     .attr("class", "grid")
+          //     .attr("transform", "translate(150,0)")
+          //     .call(make_y_gridlines()
+          //         .tickSize(-width)
+          //         .tickFormat(function(d, i){
+          //           // debugger;
+          //         })
+          //     )
+
+  linegraph.append("path")
+      .datum(realData.line)
+      .transition()
+      .attr("fill", "none")
+      .attr("stroke", "#d3d3d3")
+      .attr("stroke-linejoin", "round")
+      .attr("stroke-linecap", "round")
+      .attr("stroke-width", 1.5)
+      .attr("d", line)
+      .transition()
+      .duration(900)
+      // .ease(d3.easeLinear);
+
+      linegraph.selectAll("circle")
+          .data(realData.line)
+          .enter().append("circle")
+          // .transition()  // Transition from old to new
+          // .duration(900)  // Length of animation
+          .attr("r", 10)
+          .attr("cx", function(d, i) {
+            return x(parseTime(d.date))
+          })
+          .attr("cy", function(d) {
+            return height + y(d.value) - 10;
+          })
+          .attr("fill", function(d, i) {
+            return 'blue'
+            // return ecogCircleFills[d.value]
+          })
+
+
+      linegraph.selectAll("div")
+          .data(realData.line)
+          .enter()
+          .append("text")
+          .attr("x", function(d, i) {
+            return x(parseTime(d.date)) - 4
+          })
+          .attr("y", function(d) {
+            return height + y(d.value) - 5;
+          })
+          .text(function(d){return d.value});
+
+
+  function drawCircles(element, data) {
+    element.selectAll("circle")
+      .data(data)
+      .enter()
+      .append("circle")
+      .on("mouseover", d => showTooltip(d))
+      .on("mouseout", d => hideTooltip())
+      .attr("r", 10)
+      .attr("cx", function(d, i) {
+        return x(parseTime(d.date))
+      })
+      .attr("cy", function(d) {
+        return getYPositionOf(d.name)
+      })
+      .attr("class", "gantt-rect")
+      .style("fill", (d,i) => colorSwatch[0]);
+  }
+
+  drawCircles(medicationsSection, realData.medications)
+  drawCircles(radiationSection, realData.radiation)
+  drawCircles(imagingSection, realData.imaging)
+
+  ecogCircleFills = ["#fff5f0", "#fee0d2", "#fcbba1", "#fc9272", "#fb6a4a", "#ef3b2c", "#cb181d", "#99000d"]
+
+  function showTooltip(d) {
+    div.transition()
+        .duration(200)
+        .style("opacity", .9);
+    div.html(d.name + "  " + d.date)
+        .style("left", (d3.event.pageX) + "px")
+        .style("top", (d3.event.pageY - 28) + "px");
+  }
+
+  function hideTooltip(){
+    div.transition()
+        .duration(900)
+        .style("opacity", 0);
+  }
+
+// }
+
+
+var slider = document.getElementById("myRange");
+
+// Update the current slider value (each time you drag the slider handle)
+slider.oninput = function() {
+
+  function prepareDateString(dateInMilliseconds) {
+    var dateToConvert = new Date(dateInMilliseconds)
+    var day = dateToConvert.getDate()
+    var monthNum = dateToConvert.getMonth()
+    var month = new Array();
+    month[0] = "Jan";
+    month[1] = "Feb";
+    month[2] = "Mar";
+    month[3] = "Apr";
+    month[4] = "May";
+    month[5] = "Jun";
+    month[6] = "Jul";
+    month[7] = "Aug";
+    month[8] = "Sep";
+    month[9] = "Oct";
+    month[10] = "Nov";
+    month[11] = "Dec";
+    var monthString = month[monthNum];
+    var year = String(dateToConvert.getFullYear())
+    var editedYear = year.slice(year.length - 2, year.length)
+    var dateString = `${day}-${monthString}-${editedYear}`
+    return dateString
+  }
+
+  function resetZoomLevels(zoomLevel){
+    var currentMedian = medianDate(collectDates(currentDataCollection))
+    var newUpperLimit = currentMedian.getTime() + zoomLevelMapping[zoomLevel]
+    var newLowerLimit = currentMedian.getTime() - zoomLevelMapping[zoomLevel]
+    var upperLimitString = parseTime(prepareDateString(newUpperLimit))
+    var lowerLimitString = parseTime(prepareDateString(newLowerLimit))
+
+    var new_data = filterDataObjByDate(realData, lowerLimitString, upperLimitString)
+    lerefresh(new_data)
+    currentDataCollection = new_data
+  }
+
+  if(this.value > 80) {
+    resetZoomLevels(4)
+  } else if (this.value < 80 && this.value > 60){
+    resetZoomLevels(3)
+  } else if (this.value < 60 && this.value > 40) {
+    resetZoomLevels(2)
+  } else if (this.value < 40 && this.value > 20) {
+    resetZoomLevels(1)
+  } else if (this.value < 20) {
+    resetZoomLevels(0)
+  }
+
+}
+
+// Update the current slider value (each time you drag the slider handle)
+lerefresh = function(data) {
+      x.domain(d3.extent(collectDates(data), function(d) { return parseTime(d); }));
+
+          var circles = svg.selectAll("circle")
+            .data(data.basic_plotting_categories)
+
+
+          circles.exit()
+            .remove()
+
+          circles.transition()
+            .duration(900)  // Length of animation
+            .attr("cx", d => x(parseTime(d.date)))
+            .attr("cy", function(d){
+              return getYPositionOf(d.category)
+            })
+            .attr("class", d => d.category.toLowerCase())
+            // .on("mouseover", d => showTooltip(d))
+            // .on("mouseout", d => hideTooltip());
+
+        circles.enter()
+          .append("circle")
+          .transition()  // Transition from old to new
+          .duration(900)  // Length of animation
+          .attr("r", d => 10)
+          .attr("cx", d => x(parseTime(d.date)))
+          .attr("cy", function(d){
+            return getYPositionOf(d.category)
+          })
+          .attr("class", d => d.category.toLowerCase())
+
+          // var div = d3.select("body").append("div")
+          //     .attr("class", "tooltip")
+          //     .style("opacity", 0);
+
+            // .enter()
+            // .append("circle")
+            // // .transition()  // Transition from old to new
+            // // .duration(900)  // Length of animation
+            // .attr("r", d => 10)
+            var medicationCircles = medicationsSection.selectAll("circle")
+              .data(data.medications)
+
+            var radiationCircles = radiationSection.selectAll("circle")
+              .data(data.radiation)
+
+            var imagingCircles = imagingSection.selectAll("circle")
+              .data(data.imaging)
+
+              transitionCirclesInElement(medicationCircles)
+              transitionCirclesInElement(radiationCircles)
+              transitionCirclesInElement(imagingCircles)
+
+
+
+            function transitionCirclesInElement(gantt) {
+
+              gantt.exit()
+                .remove()
+
+              gantt.transition()  // Transition from old to new
+                .duration(900)  // Length of animation
+                .attr("r", 10)
+                .attr("cx", function(d, i) {
+                  return x(parseTime(d.date))
+                })
+                .attr("cy", function(d) {
+                  return getYPositionOf(d.name)
+                })
+                .attr("class", "gantt-rect")
+                .style("fill", (d,i) => colorSwatch[0]);
+
+              gantt.enter()
+                .append("circle")
+                .on("mouseover", d => showTooltip(d))
+                .on("mouseout", d => hideTooltip())
+                .transition()
+                .duration(900)  // Length of animation
+                .attr("r", 10)
+                .attr("cx", function(d, i) {
+                  return x(parseTime(d.date))
+                })
+                .attr("cy", function(d) {
+                  return getYPositionOf(d.name)
+                })
+                .attr("class", "gantt-rect")
+                .style("fill", (d,i) => colorSwatch[0]);
+              }
+
+                svg.selectAll(".basic-circle")
+                  .data(realData.basic_plotting_categories)
+                  .exit()
+                  .remove()
+
+                svg.selectAll(".basic-circle")
+                  .data(realData.basic_plotting_categories)
+                  .enter()
+                  .append("circle")
+                  .transition()  // Transition from old to new
+                  .duration(900)  // Length of animation
+                  .attr("r", d => 10)
+                  .attr("cx", d => x(parseTime(d.date)))
+                  .attr("cy", function(d){
+                    return getYPositionOf(d.category)
+                  })
+                  .attr("class", d => d.category.toLowerCase());
+
+              var line = d3.line()
+                  .x(function(d) { return x(parseTime(d.date)); })
+                  .y(function(d) { return height + y(d.value) - 10; })
+
+
+                  linegraph.exit()
+
+                  var linepath = linegraph.selectAll("path")
+                        .datum(data.line)
+
+            linepath.transition()
+                .duration(900)  // Length of animation
+                .attr("fill", "none")
+                .attr("stroke", "#d3d3d3")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("stroke-width", 1.5)
+                .attr("d", line)
+                .transition()
+                .duration(900)
+                .ease(d3.easeLinear);
+
+          var linecircles = linegraph.selectAll("circle")
+              .data(realData.line)
+
+            linecircles.exit()
+
+            linecircles.enter()
+              .append("circle")
+              .transition()  // Transition from old to new
+              .duration(900)  // Length of animation
+              .attr("r", 10)
+              .attr("cx", function(d, i) {
+                return x(parseTime(d.date))
+              })
+              .attr("cy", function(d) {
+                return height + y(d.value) - 10;
+              })
+              .attr("fill", function(d, i) {
+                return 'blue'
+              })
+
+        var linelabels = linegraph.selectAll("text")
+            .data(data.line)
+
+            linelabels.exit()
+              .remove()
+
+            linelabels.transition()
+              // .duration(900)  // Length of animation
+              .attr("x", function(d, i) {
+                return x(parseTime(d.date)) - 4
+              })
+              .attr("y", function(d) {
+                return height + y(d.value) - 5;
+              })
+              .text(function(d){return d.value})
+              .style("fill", "white");
+
+            linelabels.enter()
+              .append("text")
+              .attr("x", function(d, i) {
+                return x(parseTime(d.date)) - 4
+              })
+              .attr("y", function(d) {
+                return height + y(d.value) - 5;
+              })
+              .text(function(d){return d.value});
+
+
+          d3.select(".x.axis")
+              .transition()
+              .duration(900)
+              .call(d3.axisBottom(x));
+
+          // Update Y Axis
+          d3.select(".y.axis")
+              .transition()
+              .duration(900)
+              .call(yAxis);
+    // output.innerHTML = this.value;
+}
+
+</script>
